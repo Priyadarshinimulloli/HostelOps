@@ -1,0 +1,29 @@
+version: '3'
+services:
+  backend:
+    build: ./backend
+    container_name: hostelops_backend
+    environment:
+      - NODE_ENV=production
+    expose:
+      - "5000"
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: hostelops_frontend
+    expose:
+      - "80"
+    restart: always
+
+  nginx:
+    image: nginx:latest
+    container_name: hostelops_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend
+      - frontend
+    restart: always

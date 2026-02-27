@@ -1,6 +1,17 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('Missing required environment variable: JWT_SECRET');
+    process.exit(1);
+  }
+
+  process.env.JWT_SECRET = 'dev_jwt_secret_change_me';
+  console.warn('JWT_SECRET is not set. Using a development fallback secret.');
+}
+
 const { connectDB } = require('./config/database');
 const authRoutes = require('./routes/auth');
 const complaintRoutes = require('./routes/complaints');
