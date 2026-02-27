@@ -1,6 +1,6 @@
 services:
   backend:
-    build: ./backend
+    image: YOUR_DOCKERHUB_USERNAME/hostelops-backend:latest
     container_name: hostelops_backend
     environment:
       - NODE_ENV=production
@@ -15,7 +15,7 @@ services:
       - hostelops-network
 
   frontend:
-    build: ./frontend
+    image: YOUR_DOCKERHUB_USERNAME/hostelops-frontend:latest
     container_name: hostelops_frontend
     expose:
       - "80"
