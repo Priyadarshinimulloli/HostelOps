@@ -1,15 +1,79 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const Complaint = require('../models/Complaint');
 const User = require('../models/User');
 const { authenticate, isAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Configure multer for image uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads');
+    // Ensure upload directory exists
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename: timestamp-randomstring-originalname
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+// File filter to only allow images
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png|gif|webp/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+  
+  if (extname && mimetype) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed (JPEG, PNG, GIF, WebP)'));
+  }
+};
+
+// Configure multer upload
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
 // POST /api/complaints - Create a new complaint (Student only)
-router.post('/', authenticate, async (req, res) => {
+// Middleware to handle both JSON and multipart form data
+const handleComplaintUpload = (req, res, next) => {
+  const contentType = req.get('Content-Type') || '';
+  
+  // If multipart, use multer
+  if (contentType.includes('multipart/form-data')) {
+    upload.single('image')(req, res, next);
+  } else {
+    // If JSON, skip multer
+    next();
+  }
+};
+
+router.post('/', authenticate, handleComplaintUpload, async (req, res) => {
   try {
+    // Debug logging
+    console.log('Content-Type:', req.get('Content-Type'));
+    console.log('Request body:', req.body);
+    console.log('Request file:', req.file);
+    
     // Only students can create complaints
     if (req.user.role !== 'student') {
+      // Delete uploaded file if user is not a student
+      if (req.file) {
+        fs.unlinkSync(req.file.path);
+      }
       return res.status(403).json({ error: 'Only students can submit complaints' });
     }
 
@@ -17,12 +81,22 @@ router.post('/', authenticate, async (req, res) => {
 
     // Validate input
     if (!category || !description) {
-      return res.status(400).json({ error: 'Please provide category and description' });
+      // Delete uploaded file if validation fails
+      if (req.file) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(400).json({ 
+        error: 'Please provide category and description',
+        debug: { category, description, body: req.body }
+      });
     }
 
     // Validate category
     const validCategories = ['Electrical', 'Plumbing', 'Cleaning', 'Other'];
     if (!validCategories.includes(category)) {
+      if (req.file) {
+        fs.unlinkSync(req.file.path);
+      }
       return res.status(400).json({ error: 'Invalid category' });
     }
 
@@ -32,17 +106,28 @@ router.post('/', authenticate, async (req, res) => {
 
     // Validate description length
     if (description.length < 10 || description.length > 1000) {
+      if (req.file) {
+        fs.unlinkSync(req.file.path);
+      }
       return res.status(400).json({ error: 'Description must be between 10 and 1000 characters' });
     }
 
-    // Create complaint
-    const complaint = await Complaint.create({
+    // Prepare complaint data
+    const complaintData = {
       userId: req.user.id,
       category,
       description,
       priority: complaintPriority,
       status: 'Pending',
-    });
+    };
+
+    // Add image URL if file was uploaded
+    if (req.file) {
+      complaintData.imageUrl = `/uploads/${req.file.filename}`;
+    }
+
+    // Create complaint
+    const complaint = await Complaint.create(complaintData);
 
     // Fetch complaint with user details
     const complaintWithUser = await Complaint.findByPk(complaint.id, {
@@ -58,6 +143,19 @@ router.post('/', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Create complaint error:', error);
+    // Delete uploaded file if there was an error
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    // Handle multer errors
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size too large. Maximum size is 5MB' });
+      }
+      return res.status(400).json({ error: error.message });
+    }
+    
     res.status(500).json({ error: 'Server error while creating complaint' });
   }
 });

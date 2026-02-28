@@ -32,7 +32,19 @@ export const authAPI = {
 
 // Complaints API
 export const complaintsAPI = {
-  create: (data) => api.post('/complaints', data),
+  create: (data) => {
+    // If data is FormData, let browser set Content-Type automatically (includes boundary)
+    if (data instanceof FormData) {
+      const token = localStorage.getItem('token');
+      return axios.post(`${API_URL}/complaints`, data, {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+      });
+    }
+    // Otherwise send as JSON
+    return api.post('/complaints', data);
+  },
   getMy: () => api.get('/complaints/my'),
   getAll: (filters = {}) => {
     const params = new URLSearchParams(filters).toString();

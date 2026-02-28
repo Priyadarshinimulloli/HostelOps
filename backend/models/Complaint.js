@@ -38,6 +38,10 @@ const Complaint = sequelize.define('Complaint', {
     allowNull: false,
     defaultValue: 'Pending',
   },
+  imageUrl: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 }, {
   timestamps: true,
   updatedAt: 'updatedAt',
