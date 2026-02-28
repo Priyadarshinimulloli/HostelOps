@@ -77,13 +77,9 @@ Node.js
 
 Express.js
 
-Sequelize ORM
-
 SQLite
 
 JWT Authentication
-
-bcryptjs
 
 Frontend
 
